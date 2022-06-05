@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
-using csDelaunay;
 
 
 public class JsonParser : MonoBehaviour
@@ -13,14 +12,12 @@ public class JsonParser : MonoBehaviour
 	[HideInInspector]
 	Root m_data;
 	List<GameObject> m_cellPoints = new List<GameObject>();
-	private Dictionary<Vector2f, Site> sites;
-    private List<Edge> edges;
 
 	public void Parse()
 	{
 		print(m_filename);
 		m_data = JsonUtility.FromJson<Root>(File.ReadAllText(m_filename));
-		List <Vector2f> points = new List<Vector2f>();
+		List <Vector2> points = new List<Vector2>();
 		DisplayMap();
 	}
 
@@ -29,13 +26,13 @@ public class JsonParser : MonoBehaviour
 		
         foreach (Vertex v in m_data.vertices)
 		{
-			Vector2f p0 = new Vector2f(v.p[0], v.p[1]);
+			Vector2 p0 = new Vector2(v.p[0], v.p[1]);
 			print("X: " + p0.x + " Y: " + p0.y);
 			foreach(int id in v.v)
 			{
 				if (id != -1)
 				{
-					Vector2f p1 = new Vector2f(m_data.vertices[id].p[0], m_data.vertices[id].p[1]);
+					Vector2 p1 = new Vector2(m_data.vertices[id].p[0], m_data.vertices[id].p[1]);
 					DrawLine(p0, p1, tx, Color.black);
 				}
 			}
@@ -59,7 +56,7 @@ public class JsonParser : MonoBehaviour
     }
  
     // Bresenham line algorithm
-    private void DrawLine(Vector2f p0, Vector2f p1, Texture2D tx, Color c, int offset = 0) {
+    private void DrawLine(Vector2 p0, Vector2 p1, Texture2D tx, Color c, int offset = 0) {
         int x0 = (int)p0.x;
         int y0 = (int)p0.y;
         int x1 = (int)p1.x;
