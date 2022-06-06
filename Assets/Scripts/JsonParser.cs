@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
+using System.Linq;
 
 
 public class JsonParser : MonoBehaviour
@@ -10,40 +11,46 @@ public class JsonParser : MonoBehaviour
 	[SerializeField]
 	string m_filename;
 	[HideInInspector]
-	Root m_data;
-	List<GameObject> m_cellPoints = new List<GameObject>();
+	public Root data;
+	Vector2 m_min;
+	Vector2 m_max;
+	Mesh mesh;
 
 	public void Parse()
 	{
 		print(m_filename);
-		m_data = JsonUtility.FromJson<Root>(File.ReadAllText(m_filename));
+		data = JsonUtility.FromJson<Root>(File.ReadAllText(m_filename));
 		List <Vector2> points = new List<Vector2>();
-		DisplayMap();
+		// DisplayMap();
 	}
 
-	private void DisplayMap() {
+	private void DisplayMap()
+	{
         Texture2D tx = new Texture2D(2000,2000);
 		
-        foreach (Vertex v in m_data.vertices)
+        foreach (Vertex v in data.vertices)
 		{
-			Vector2 p0 = new Vector2(v.p[0], v.p[1]);
+			Vector2 p0 = TranslatePoint(new Vector2(v.p[0], v.p[1]));
 			print("X: " + p0.x + " Y: " + p0.y);
 			foreach(int id in v.v)
 			{
 				if (id != -1)
 				{
-					Vector2 p1 = new Vector2(m_data.vertices[id].p[0], m_data.vertices[id].p[1]);
+					Vector2 p1 = TranslatePoint(new Vector2(data.vertices[id].p[0], data.vertices[id].p[1]));
 					DrawLine(p0, p1, tx, Color.black);
 				}
 			}
         }
 
-		foreach(Cell cell in m_data.cells.cells)
+		foreach(Cell cell in data.cells.cells)
 		{
 			switch(cell.biome)
 			{
 				case 0:
-					tx.SetPixel((int)cell.p[0],(int)cell.p[1], Color.blue);
+					List<Vector2> cellVertices = new List<Vector2>();
+					foreach (int id in cell.v)
+						cellVertices.Add(TranslatePoint(new Vector2(data.vertices[id].p[0], data.vertices[id].p[1])));
+						FillPolygon(tx, cellVertices, Color.blue);
 					break;
 				default:
 					break;
@@ -56,7 +63,8 @@ public class JsonParser : MonoBehaviour
     }
  
     // Bresenham line algorithm
-    private void DrawLine(Vector2 p0, Vector2 p1, Texture2D tx, Color c, int offset = 0) {
+    private void DrawLine(Vector2 p0, Vector2 p1, Texture2D tx, Color c, int offset = 0)
+	{
         int x0 = (int)p0.x;
         int y0 = (int)p0.y;
         int x1 = (int)p1.x;
@@ -83,6 +91,86 @@ public class JsonParser : MonoBehaviour
             }
         }
     }
+
+	private void FillPolygon(Texture2D texture, List<Vector2> vertices, Color color)
+	{
+		// Set polygon bounding box.
+		int IMAGE_TOP = (int)vertices.Max(v => v.y);
+		int IMAGE_BOTTOM = (int)vertices.Min(v => v.y);
+		int IMAGE_RIGHT = (int)vertices.Max(v => v.x);
+		int IMAGE_LEFT = (int)vertices.Min(v => v.x);
+
+		int POLY_CORNERS = vertices.Count;
+
+		// Decompose vertex components into parallel lists for looping.
+		List<float> polyX = vertices.Select(v => v.x).ToList();
+		List<float> polyY = vertices.Select(v => v.y).ToList();
+
+		int[] nodeX = new int[POLY_CORNERS];
+		int nodes, pixelX, pixelY, i, j, swap;
+
+		// Scan through each row of the polygon.
+		for (pixelY = IMAGE_BOTTOM; pixelY < IMAGE_TOP; pixelY++)
+		{
+			nodes = 0; j = POLY_CORNERS - 1;
+
+			// Build list of nodes.
+			for (i = 0; i < POLY_CORNERS; i++) {
+				if (polyY[i] < (float)pixelY && polyY[j] >= (float)pixelY
+					|| polyY[j] < (float)pixelY && polyY[i] >= (float)pixelY) {
+					nodeX[nodes] = (int)(polyX[i] + (pixelY - polyY[i]) /
+					(polyY[j] - polyY[i]) * (polyX[j] - polyX[i]));
+					nodes++;
+				}
+				j = i;
+			}
+
+			// Sort the nodes.
+			i = 0;
+			while (i < nodes - 1) {
+				if (nodeX[i] > nodeX[i + 1]) {
+					swap = nodeX[i];
+					nodeX[i] = nodeX[i + 1];
+					nodeX[i + 1] = swap;
+
+					if (i > 0) {
+						i--;
+					}
+				} else {
+					i++;
+				}
+			}
+
+			// Fill the pixels between node pairs.
+			for (i = 0; i < nodes; i += 2)
+			{
+				if (nodeX[i] >= IMAGE_RIGHT) {
+					break;
+				}
+
+				if (nodeX[i + 1] > IMAGE_LEFT) {
+					// Bind nodes past the left border.
+					if (nodeX[i] < IMAGE_LEFT) {
+						nodeX[i] = IMAGE_LEFT;
+					}
+					// Bind nodes past the right border.
+					if (nodeX[i + 1] > IMAGE_RIGHT) {
+						nodeX[i + 1] = IMAGE_RIGHT;
+					}
+					// Fill pixels between current node pair.
+					for (pixelX = nodeX[i]; pixelX < nodeX[i + 1]; pixelX++) {
+						texture.SetPixel(pixelX, pixelY, color);
+					}
+				}
+			}
+		}
+	}
+
+	Vector2 TranslatePoint(Vector2 p)
+	{
+		p.y = 2000 - p.y;
+		return p;
+	}
 }
 
 
